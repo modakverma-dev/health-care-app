@@ -19,6 +19,20 @@ router.get("/departments", async (req, res) => {
   }
 });
 
+router.get("/top-doctors", async (req, res) => {
+  try {
+    const result = await pgClient.query(
+      `SELECT * FROM doctors ORDER BY rating DESC`
+    );
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({
+      message: "Internal server error!",
+    });
+  }
+});
+
 router.get("/dept-doctors/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -27,7 +41,6 @@ router.get("/dept-doctors/:id", async (req, res) => {
         message: "Invalid department id",
       });
     }
-    console.log(id, "dept id");
     const doctors = await pgClient.query(
       `SELECT * FROM doctors WHERE departmentid=$1`,
       [id]

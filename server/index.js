@@ -1,10 +1,12 @@
 const fs = require("fs");
+const http = require("http");
 // Express App Setup
 const express = require("express");
+const { Server } = require("socket.io");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const { validateSession } = require("./utils/validations");
 const app = express();
+const server = http.createServer(app);
 app.use(cors());
 app.use(bodyParser.json());
 const { pgClient } = require("./db");
@@ -13,6 +15,8 @@ const tokenRoutes = require("./routes/appointments");
 const hospitalRoutes = require("./routes/hospital");
 const homeRoutes = require("./routes/home");
 const { extractToken } = require("./middlewares");
+
+const io = new Server(server);
 
 fs.readFile("./db/schema.sql", "utf8", (err, data) => {
   if (err) {
@@ -35,6 +39,11 @@ fs.readFile("./db/schema.sql", "utf8", (err, data) => {
   });
 });
 
+//Socket io
+io.on("connection", (socket) => {
+  console.log("a new user has connected", socket.id);
+});
+
 // Express route handlers
 app.get("/health", extractToken, async (req, res) => {
   return res.status(200).json({
@@ -46,6 +55,6 @@ app.use("/appointment", tokenRoutes);
 app.use("/hospital", hospitalRoutes);
 app.use("/home", homeRoutes);
 
-app.listen(6000, (err) => {
+server.listen(6000, (err) => {
   console.log("Listening on PORT:", 6000);
 });

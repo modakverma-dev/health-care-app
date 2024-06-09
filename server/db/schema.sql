@@ -45,7 +45,7 @@ ALTER TABLE public.dates OWNER TO hcapp;
 -- Name: dates_date_id_seq; Type: SEQUENCE; Schema: public; Owner: hcapp
 --
 
-CREATE SEQUENCE public.dates_date_id_seq
+CREATE SEQUENCE IF NOT EXISTS public.dates_date_id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -81,7 +81,7 @@ ALTER TABLE public.departments OWNER TO hcapp;
 -- Name: departments_departmentid_seq; Type: SEQUENCE; Schema: public; Owner: hcapp
 --
 
-CREATE SEQUENCE public.departments_departmentid_seq
+CREATE SEQUENCE IF NOT EXISTS public.departments_departmentid_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -132,7 +132,7 @@ ALTER TABLE public.doctors OWNER TO hcapp;
 -- Name: doctors_doctorid_seq; Type: SEQUENCE; Schema: public; Owner: hcapp
 --
 
-CREATE SEQUENCE public.doctors_doctorid_seq
+CREATE SEQUENCE IF NOT EXISTS public.doctors_doctorid_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -204,7 +204,7 @@ ALTER TABLE public.tokens OWNER TO hcapp;
 -- Name: tokens_tokenid_seq; Type: SEQUENCE; Schema: public; Owner: hcapp
 --
 
-CREATE SEQUENCE public.tokens_tokenid_seq
+CREATE SEQUENCE IF NOT EXISTS public.tokens_tokenid_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -241,7 +241,7 @@ ALTER TABLE public.users OWNER TO hcapp;
 -- Name: users_userid_seq; Type: SEQUENCE; Schema: public; Owner: hcapp
 --
 
-CREATE SEQUENCE public.users_userid_seq
+CREATE SEQUENCE IF NOT EXISTS public.users_userid_seq
     AS integer
     START WITH 1
     INCREMENT BY 1

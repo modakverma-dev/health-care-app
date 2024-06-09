@@ -26,11 +26,7 @@ router.get("/", async (req, res) => {
       });
     }
     const userResult = await pgClient.query(
-      `SELECT * FROM(SELECT u.*,t.tokenid FROM users u LEFT JOIN tokens t ON u.userid=t.userid) WHERE userid=$1;`,
-      [user_id]
-    );
-    const result = await pgClient.query(
-      `SELECT end_time FROM slots s JOIN (SELECT * FROM(SELECT u.*,t.tokenid,t.slotid FROM users u LEFT JOIN tokens t ON u.userid=t.userid) WHERE userid=$1) ut ON s.slot_id=ut.slotid;`,
+      `SELECT * FROM(SELECT u.*,t.tokenid,t.slotid FROM users u LEFT JOIN tokens t ON u.userid=t.userid) WHERE userid=$1;`,
       [user_id]
     );
     if (!userResult.rows.length) {
@@ -40,12 +36,29 @@ router.get("/", async (req, res) => {
     }
     delete userResult.rows[0].password;
     delete userResult.rows[0].sessionid;
-    res
-      .status(200)
-      .json({
-        ...userResult.rows[0],
-        token_lifetime: result.rows[0] ? result.rows[0].end_time : null,
-      });
+    let finalResult = {
+      userData: userResult.rows[0],
+      tokens: [],
+    };
+    for (let obj of userResult.rows) {
+      const lifetime = await pgClient.query(
+        `SELECT end_time FROM slots WHERE slot_id=$1`,
+        [obj.slotid]
+      );
+      finalResult = {
+        ...finalResult,
+        tokens: [
+          ...finalResult.tokens,
+          {
+            token_lifetime: lifetime.rows.length
+              ? lifetime.rows[0].end_time
+              : null,
+            tokenid: obj.tokenid,
+          },
+        ],
+      };
+    }
+    res.status(200).json(finalResult);
   } catch (err) {
     console.log(err);
   }

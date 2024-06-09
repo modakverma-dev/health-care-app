@@ -7,6 +7,7 @@ services:
   redis:
     image: "redis:latest"
   nginx:
+    image: modakverma/hcapp-nginx
     restart: always
     build:
       dockerfile: Dockerfile.dev
@@ -14,6 +15,7 @@ services:
     ports:
       - "3050:80"
   api:
+    image: modakverma/hcapp-api
     restart: always
     build:
       dockerfile: Dockerfile.dev
@@ -29,13 +31,15 @@ services:
       - PGDATABASE=postgres
       - PGPASSWORD=password
       - PGPORT=5432
-  # client:
-  #   build:
-  #     dockerfile: Dockerfile.dev
-  #     context: ./client
-  #   volumes:
-  #     - /app/node_modules
-  #     - ./client:/app
+  client:
+    build:
+      dockerfile: Dockerfile.dev
+      context: ./client
+    volumes:
+      - /app/node_modules
+      - ./client:/app
+    depends_on:
+      - api
   # worker:
   #   build:
   #     dockerfile: Dockerfile.dev

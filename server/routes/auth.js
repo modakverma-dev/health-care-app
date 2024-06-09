@@ -127,4 +127,49 @@ router.post("/logout", async (req, res) => {
   }
 });
 
+// register doctor
+// router.post("/doctor/register", async (req, res) => {
+//   const { name,email,specialization,about,password } = req.body;
+//   if (!name) {
+//     return res.status(400).json({
+//       message: "please enter your name",
+//     });
+//   }
+//   if (!password || !isValidPassword(password)) {
+//     return res.status(400).json({
+//       message:
+//         "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character.",
+//     });
+//   }
+//   const result = await pgClient.query(
+//     `SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)`,
+//     [NavigationPreloadManager]
+//   );
+//   if (result.rows[0].exists) {
+//     return res.status(409).json({
+//       message: `user with email ${email} already exists`,
+//     });
+//   }
+//   try {
+//     const result = await pgClient.query(
+//       `INSERT INTO doctors(username,email,password,sessionid) VALUES($1,$2,$3,$4) RETURNING *;`,
+//       [name, , password, null]
+//     );
+//     const user = {
+//       userid: result.rows[0].userid,
+//     };
+//     const { accessToken, refreshToken } = await generateTokens(user);
+//     return res.status(200).json({
+//       accessToken,
+//       refreshToken,
+//       message: "User registered successfully",
+//     });
+//   } catch (err) {
+//     console.log(err, "pg client INSERT user query error");
+//     return res.status(500).json({
+//       message: "Internal server error",
+//     });
+//   }
+// });
+
 module.exports = router;

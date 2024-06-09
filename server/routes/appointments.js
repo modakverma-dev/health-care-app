@@ -14,6 +14,48 @@ const redisClient = redis.createClient({
 });
 // const redisPublisher = redisClient.duplicate();
 
+router.get("/all", async (req, res) => {
+  try {
+    let finalRes = [];
+    const doctorDetailsResponse = await pgClient.query(
+      `SELECT * FROM doctors where doctorid=$1`,
+      [4]
+    );
+    const { departmentid } = doctorDetailsResponse.rows[0];
+    const availableTokens = await pgClient.query(
+      `SELECT * from tokens where departmentid=$1`,
+      [departmentid]
+    );
+    for (let obj of availableTokens.rows) {
+      let userInfo = await pgClient.query(
+        `SELECT * FROM users WHERE userid=$1`,
+        [obj.userid]
+      );
+      delete userInfo.rows[0].password;
+      delete userInfo.rows[0].sessionid;
+      let userSlotInfo = await pgClient.query(
+        `SELECT * FROM slots WHERE slot_id=$1`,
+        [obj.slotid]
+      );
+      finalRes = [
+        ...finalRes,
+        {
+          tokenId: obj.tokenid,
+          ...userInfo.rows[0],
+          ...userSlotInfo.rows[0],
+        },
+      ];
+    }
+    console.log(finalRes, "finalRes");
+    res.status(200).json(finalRes);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({
+      message: "Internal server error !",
+    });
+  }
+});
+
 router.post("/generate-token", async (req, res) => {
   try {
     const bearerToken = req.headers["authorization"];
@@ -45,17 +87,24 @@ router.post("/generate-token", async (req, res) => {
         message: "User not Found !",
       });
     }
+
+    const { doctor_id, slot_id, department_id } = req.body;
+
+    if (!doctor_id || !slot_id || !department_id) {
+      return res.status(400).json({
+        message: "provide required fields",
+      });
+    }
+
     const existingToken = await pgClient.query(
-      `SELECT * FROM tokens WHERE userid=$1`,
-      [user_id]
+      `SELECT * FROM tokens WHERE userid=$1 AND departmentid=$2`,
+      [user_id, department_id]
     );
-    console.log(existingToken.rows, "existingToken");
     if (existingToken.rows.length) {
       return res.status(409).json({
         message: "1 Active token for user already exists !",
       });
     }
-    const { doctor_id, slot_id, department_id } = req.body;
 
     // ** check whether doctor_id,dept_id and slot_id exists **
 
@@ -76,7 +125,6 @@ router.post("/generate-token", async (req, res) => {
     }
     let lindex = util.promisify(redisClient.lindex).bind(redisClient);
     const lastElement = await lindex(key, 0);
-    console.log(lastElement, "lastElement");
 
     if (lengthOfQueue < 4) {
       const value = {
@@ -84,8 +132,8 @@ router.post("/generate-token", async (req, res) => {
         token_no: lastElement ? JSON.parse(lastElement).token_no + 1 : 0,
       };
       await pgClient.query(
-        `INSERT into tokens (userid,slotid) VALUES($1,$2);`,
-        [user_id, slot_id]
+        `INSERT into tokens (userid,slotid,departmentid) VALUES($1,$2,$3);`,
+        [user_id, slot_id, department_id]
       );
       await redisClient.lpush(key, JSON.stringify(value));
       // redisPublisher.publish("generate", JSON.stringify(value));
