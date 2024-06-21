@@ -1,5 +1,5 @@
 const { Router } = require("express");
-const { pgClient } = require("../db");
+const { supabase } = require("../db");
 const router = Router();
 const jwt = require("jsonwebtoken");
 
@@ -25,40 +25,17 @@ router.get("/", async (req, res) => {
         message: "User not found! Unauthorized access",
       });
     }
-    const userResult = await pgClient.query(
-      `SELECT * FROM(SELECT u.*,t.tokenid,t.slotid FROM users u LEFT JOIN tokens t ON u.userid=t.userid) WHERE userid=$1;`,
-      [user_id]
-    );
-    if (!userResult.rows.length) {
-      return res.status(404).json({
-        message: "user not found!",
-      });
-    }
-    delete userResult.rows[0].password;
-    delete userResult.rows[0].sessionid;
-    let finalResult = {
-      userData: userResult.rows[0],
-      tokens: [],
-    };
-    for (let obj of userResult.rows) {
-      const lifetime = await pgClient.query(
-        `SELECT end_time FROM slots WHERE slot_id=$1`,
-        [obj.slotid]
-      );
-      finalResult = {
-        ...finalResult,
-        tokens: [
-          ...finalResult.tokens,
-          {
-            token_lifetime: lifetime.rows.length
-              ? lifetime.rows[0].end_time
-              : null,
-            tokenid: obj.tokenid,
-          },
-        ],
-      };
-    }
-    res.status(200).json(finalResult);
+    const userResult = await supabase
+      .from("users")
+      .select(
+        `username,image,
+         tokens(id,
+          slotId:slots (startTime,endTime,available,created_at),
+          dateId: doctor_dates (id, date)
+        )`
+      )
+      .eq("id", user_id);
+    res.status(200).json(userResult.data[0]);
   } catch (err) {
     console.log(err);
   }

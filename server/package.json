@@ -1,7 +1,9 @@
 {
   "dependencies": {
+    "@supabase/supabase-js": "^2.43.4",
     "body-parser": "*",
     "cors": "2.8.4",
+    "dotenv": "^16.4.5",
     "express": "4.16.3",
     "jsonwebtoken": "^9.0.2",
     "nodemon": "1.18.3",

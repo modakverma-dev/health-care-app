@@ -1,6 +1,6 @@
 const { Router } = require("express");
 const router = Router();
-const { pgClient } = require("../db");
+const { supabase } = require("../db");
 const keys = require("../keys");
 const util = require("util");
 const jwt = require("jsonwebtoken");
@@ -16,43 +16,70 @@ const redisClient = redis.createClient({
 
 router.get("/all", async (req, res) => {
   try {
-    let finalRes = [];
-    const doctorDetailsResponse = await pgClient.query(
-      `SELECT * FROM doctors where doctorid=$1`,
-      [4]
-    );
-    const { departmentid } = doctorDetailsResponse.rows[0];
-    const availableTokens = await pgClient.query(
-      `SELECT * from tokens where departmentid=$1`,
-      [departmentid]
-    );
-    for (let obj of availableTokens.rows) {
-      let userInfo = await pgClient.query(
-        `SELECT * FROM users WHERE userid=$1`,
-        [obj.userid]
-      );
-      delete userInfo.rows[0].password;
-      delete userInfo.rows[0].sessionid;
-      let userSlotInfo = await pgClient.query(
-        `SELECT * FROM slots WHERE slot_id=$1`,
-        [obj.slotid]
-      );
-      finalRes = [
-        ...finalRes,
-        {
-          tokenId: obj.tokenid,
-          ...userInfo.rows[0],
-          ...userSlotInfo.rows[0],
-        },
-      ];
-    }
-    console.log(finalRes, "finalRes");
-    res.status(200).json(finalRes);
+    const tokensList = await supabase
+      .from("tokens")
+      .select(`id, created_at , users (username,image,dob)`)
+      .eq("doctorId", 3);
+    console.log(tokensList.data, "tokensList");
+    res.status(200).json(tokensList.data);
   } catch (err) {
     console.log(err);
     res.status(500).json({
       message: "Internal server error !",
     });
+  }
+});
+
+router.get("/details", async (req, res) => {
+  try {
+    const alotedDates = await supabase
+      .from("doctor_dates")
+      .select("*,slots(startTime,endTime)")
+      .eq("doctorId", 3);
+    res.status(200).json(alotedDates.data);
+  } catch (err) {
+    console.log(err);
+  }
+});
+
+router.post("/update-slots", async (req, res) => {
+  try {
+    console.log(req.body, "body");
+    res.status(201).json({ message: "cool" });
+    return;
+
+    const { data, error } = await supabase.from("doctors_dates").insert(
+      {
+        doctor_id: doctorId,
+        date: "2024-06-14",
+      },
+      { returning: "minimal" }
+    );
+
+    if (error) {
+      // Handle error
+    } else {
+      const doctorDateId = data[0].id;
+
+      const slotsToInsert = [
+        {
+          doctors_date_id: doctorDateId,
+          start_time: "08:00",
+          end_time: "09:00",
+        },
+        {
+          doctors_date_id: doctorDateId,
+          start_time: "09:00",
+          end_time: "10:00",
+        },
+      ];
+
+      const { error: slotsError } = await supabase
+        .from("slots")
+        .insert(slotsToInsert);
+    }
+  } catch (err) {
+    console.log(err);
   }
 });
 
@@ -78,37 +105,42 @@ router.post("/generate-token", async (req, res) => {
         message: "User not found! Unauthorized access",
       });
     }
-    const existingUser = await pgClient.query(
-      `SELECT * FROM users WHERE userid=$1`,
-      [user_id]
-    );
-    if (!existingUser.rows.length) {
-      return res.status(404).json({
-        message: "User not Found !",
-      });
-    }
 
-    const { doctor_id, slot_id, department_id } = req.body;
+    const { doctor_id, slot_id, date_id } = req.body;
+    console.log("called", user_id, date_id, doctor_id, slot_id);
 
-    if (!doctor_id || !slot_id || !department_id) {
+    if (!doctor_id || !slot_id || !date_id) {
       return res.status(400).json({
         message: "provide required fields",
       });
     }
 
-    const existingToken = await pgClient.query(
-      `SELECT * FROM tokens WHERE userid=$1 AND departmentid=$2`,
-      [user_id, department_id]
-    );
-    if (existingToken.rows.length) {
+    const existingSlots = await supabase
+      .from("doctor_dates")
+      .select(`*, doctors(id)`)
+      .select("*,slots(*)")
+      .eq("id", slot_id)
+      .eq("id", date_id);
+
+    if (!existingSlots.data.length)
+      return res.status(404).json({ message: "slot not found !" });
+
+    const existingTokenForSlot = await supabase
+      .from("tokens")
+      .select("*")
+      .eq(`slotId`, slot_id)
+      .eq("dateId", date_id)
+      .eq("userId", user_id);
+
+    if (existingTokenForSlot.data.length) {
       return res.status(409).json({
-        message: "1 Active token for user already exists !",
+        message: "1 Active token for this slot already exists !",
       });
     }
 
     // ** check whether doctor_id,dept_id and slot_id exists **
 
-    const key = `department-${department_id}:doctor-${doctor_id}:slot-${slot_id}`;
+    const key = `doctor-${doctor_id}:date-${date_id}:slot-${slot_id}`;
     let llen = util.promisify(redisClient.llen).bind(redisClient);
     const lengthOfQueue = await llen(key);
     let lrange = util.promisify(redisClient.lrange).bind(redisClient);
@@ -131,20 +163,25 @@ router.post("/generate-token", async (req, res) => {
         user_id: user_id,
         token_no: lastElement ? JSON.parse(lastElement).token_no + 1 : 0,
       };
-      await pgClient.query(
-        `INSERT into tokens (userid,slotid,departmentid) VALUES($1,$2,$3);`,
-        [user_id, slot_id, department_id]
-      );
+      const generateTokenRes = await supabase.from("tokens").insert([
+        {
+          doctorId: doctor_id,
+          dateId: date_id,
+          slotId: slot_id,
+          userId: user_id,
+        },
+      ]);
+      console.log(generateTokenRes, "generateTokenRes");
+
       await redisClient.lpush(key, JSON.stringify(value));
-      // redisPublisher.publish("generate", JSON.stringify(value));
       return res.status(200).json({
         message: "Successfully generated token",
       });
     } else {
-      await pgClient.query(
-        `UPDATE slots SET available=false WHERE slot_id=$1`,
-        [slot_id]
-      );
+      await supabase
+        .from("slots")
+        .update({ available: false })
+        .eq("id", slot_id);
       return res.status(409).json({
         message: "Slot queue full",
       });
@@ -163,3 +200,15 @@ router.get("/all-tokens", (req, res) => {
 });
 
 module.exports = router;
+
+// module.exports.generateToken = async (socket) => {
+//   socket.user = { ...socket.request.session.user };
+//   socket.join(socket.user.userid);
+//   await redisClient.hset(
+//     `userid:${socket.user.username}`,
+//     "userid",
+//     socket.user.userid,
+//     "connected",
+//     true
+//   );
+// };

@@ -1,16 +1,17 @@
 const { Router } = require("express");
 const router = Router();
-const { pgClient } = require("../db");
+const { supabase } = require("../db");
 
 router.get("/departments", async (req, res) => {
   try {
-    const departments = await pgClient.query(`SELECT * FROM departments;`);
-    if (!departments.rows[0]) {
+    const { data } = await supabase.from("departments").select("*");
+    if (!data) {
       return res.status(404).json({
         message: "no departments found!",
       });
     }
-    return res.status(200).json(departments.rows);
+    console.log(data);
+    return res.status(200).json(data);
   } catch (err) {
     console.log(err);
     return res.status(500).json({
@@ -21,10 +22,11 @@ router.get("/departments", async (req, res) => {
 
 router.get("/top-doctors", async (req, res) => {
   try {
-    const result = await pgClient.query(
-      `SELECT * FROM doctors ORDER BY rating DESC`
-    );
-    return res.status(200).json(result.rows);
+    const result = await supabase
+      .from("doctors")
+      .select("*")
+      .order("rating", { ascending: false });
+    return res.status(200).json(result.data);
   } catch (err) {
     console.log(err);
     return res.status(500).json({
@@ -41,16 +43,16 @@ router.get("/dept-doctors/:id", async (req, res) => {
         message: "Invalid department id",
       });
     }
-    const doctors = await pgClient.query(
-      `SELECT * FROM doctors WHERE departmentid=$1`,
-      [id]
-    );
-    if (!doctors.rows[0]) {
+    const doctors = await supabase
+      .from("doctors")
+      .select("*")
+      .eq("departmentId", id);
+    if (!doctors.data) {
       return res.status(404).json({
         message: "Sorry ! No doctors available right now",
       });
     }
-    return res.status(200).json(doctors.rows);
+    return res.status(200).json(doctors.data);
   } catch (err) {
     console.log(err);
   }
@@ -63,32 +65,23 @@ router.get("/doctors/:id", async (req, res) => {
       message: "Invalid doctor id",
     });
   }
-  const doctorDetails = await pgClient.query(
-    `SELECT * FROM doctors WHERE doctorid=$1;`,
-    [id]
-  );
-  const doctorDates = await pgClient.query(
-    `SELECT d.date,d.date_id FROM dates d JOIN doctor_dates dd ON d.date_id = dd.date_id WHERE dd.doctorid = $1 ;`,
-    [id]
-  );
-  const slots = await pgClient.query(
-    `SELECT * FROM slots s JOIN doctor_dates dd ON s.date_id=dd.date_id WHERE doctorid=$1;`,
-    [id]
-  );
-  let dateWithSlots = [];
-  for (i = 0; i < doctorDates.rows.length; i++) {
-    const date_id = doctorDates.rows[i].date_id;
-    const slotsArr = slots.rows.filter((date) => date.date_id === date_id);
-    dateWithSlots = [
-      ...dateWithSlots,
-      { ...doctorDates.rows[i], slots: slotsArr },
-    ];
-  }
+  const doctorDetails = await supabase
+    .from("doctors")
+    .select(`*`)
+    .eq("id", id)
+    .single();
 
-  console.log(dateWithSlots, "slots modiSS");
+  const { data: doctorDatesAndSlots } = await supabase
+    .from("doctor_dates")
+    .select(
+      `*,
+    slots (id,startTime,endTime,available)`
+    )
+    .eq("doctorId", id);
+
   return res.status(200).json({
-    ...doctorDetails.rows[0],
-    dates: dateWithSlots,
+    ...doctorDetails.data,
+    dates: doctorDatesAndSlots,
   });
 });
 

@@ -1,10 +1,11 @@
 const { Router } = require("express");
 const generateTokens = require("../utils/generateTokens");
 const { isValidPassword, isValidEmail } = require("../utils/validations");
-const { pgClient } = require("../db");
+const { supabase } = require("../db");
+
 const router = Router();
 
-// register user
+// // register user
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
   if (!name) {
@@ -23,22 +24,33 @@ router.post("/register", async (req, res) => {
         "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character.",
     });
   }
-  const result = await pgClient.query(
-    `SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)`,
-    [email]
-  );
-  if (result.rows[0].exists) {
-    return res.status(409).json({
-      message: `user with email ${email} already exists`,
-    });
-  }
   try {
-    const result = await pgClient.query(
-      `INSERT INTO users(username,email,password,sessionid) VALUES($1,$2,$3,$4) RETURNING *;`,
-      [name, email, password, null]
-    );
+    const result = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .single();
+    if (result.data) {
+      return res.status(409).json({
+        message: `user with email ${email} already exists`,
+      });
+    }
+    const values = {
+      username: name,
+      email,
+      password,
+    };
+    const data = await supabase.from("users").insert([values]).single();
+    if (data.status !== 201) {
+      throw new Error(data.error);
+    }
+    const userCres = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .single();
     const user = {
-      userid: result.rows[0].userid,
+      id: userCres.data.id,
     };
     const { accessToken, refreshToken } = await generateTokens(user);
     return res.status(200).json({
@@ -47,7 +59,7 @@ router.post("/register", async (req, res) => {
       message: "User registered successfully",
     });
   } catch (err) {
-    console.log(err, "pg client INSERT user query error");
+    console.log(err);
     return res.status(500).json({
       message: "Internal server error",
     });
@@ -69,25 +81,22 @@ router.post("/login", async (req, res) => {
           "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one digit, and one special character.",
       });
     }
-    const user = await pgClient.query(
-      `SELECT password,userId,sessionid FROM users WHERE email=$1;`,
-      [email]
-    );
-    if (
-      !user.rows[0] ||
-      !user.rows[0].password ||
-      user.rows[0].password !== password
-    ) {
+    const { data } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .single();
+    if (!data || !data.password || data.password !== password) {
       return res.status(404).json({
         message: "Invalid email or password",
       });
     }
-    // if (user.rows[0].sessionid) {
+    // if (data.sessionid) {
     //   return res.status(409).json({
     //     message: "User already LoggedIn",
     //   });
     // }
-    const { accessToken, refreshToken } = await generateTokens(user.rows[0]);
+    const { accessToken, refreshToken } = await generateTokens(data);
     res.status(200).json({
       accessToken,
       refreshToken,
@@ -111,10 +120,7 @@ router.post("/logout", async (req, res) => {
         message: "User email is required",
       });
     }
-    await pgClient.query(
-      `UPDATE users SET sessionid = null WHERE email = $1;`,
-      [email]
-    );
+    await supabase.from("users").update({ sessionid: null }).eq("email", email);
     res.status(200).json({
       message: "Logged out successfully",
     });
